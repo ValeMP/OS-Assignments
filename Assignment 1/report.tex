@@ -1,0 +1,211 @@
+\documentclass[a4paper]{article}
+\usepackage{listings}
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+
+\title{COL331 Assignment 1 \\
+		\large Process Management and System Calls}
+
+\author{Utkarsh Singh, 2015ME10686}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{Objective}
+To modify the xv6 kernel to achieve the following functionalities:
+\begin{enumerate}
+	\item System Call Tracing
+    \begin{enumerate}
+    	\item Print out a line for each system call invocation, and the number of times it has been called.
+        \item Introduce a sys\_toggle() system call to toggle the system trace printed on the screen.
+    \end{enumerate}
+    \item sys\_add() System Call - To add a system call that takes two integer arguments and return their sum.
+    \item sys\_ps() System Call - To add a system call that prints a list of all the current running processes.
+\end{enumerate}
+\section*{Procedure}
+Each part is implemented in the order mentioned above.
+
+\subsection*{Part 1(a)}
+In order to print out the system trace along with it's count, the following two global arrays are introduced in \textit{syscall.c}
+\newline
+
+\begin{lstlisting}
+int count_syscalls[24];//Maintains count of each syscall
+char *name_syscalls[] //Array containing all syscall names
+= {"sys_fork","sys_exit","sys_wait","sys_pipe","sys_read",
+"sys_kill","sys_exec","sys_fstat","sys_chdir","sys_dup",
+"sys_getpid","sys_sbrk","sys_sleep","sys_uptime","sys_open",
+"sys_write","sys_mknod","sys_unlink","sys_link","sys_mkdir",
+"sys_close", "sys_toggle", "sys_add", "sys_ps"};
+\end{lstlisting}
+\noindent (Note that the extra system calls that will be introduced later have already been accounted for in these arrays. Their declarations and definitions are explained later.)
+
+\newpage
+\noindent The count\_syscalls array keeps the count of the number of times each system call has been called since booting xv6, and the name\_syscalls array stores the names of all system calls. 
+\newline
+
+\noindent The syscall() function in \textit{syscall.c} was modified as follows to print the system trace, along with keeping track of the system call count. Below is the syscall() function from \textit{syscall.c}, with the modifications mentioned as "added".
+
+\begin{lstlisting}
+void syscall(void)
+{
+  int num;
+  struct proc *curproc = myproc();
+  num = curproc->tf->eax;
+  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    count_syscalls[num-1] = count_syscalls[num-1]+1; //added
+    if(check_systrace()) //is explained later
+      cprintf("%s %d\n", 
+      name_syscalls[num-1], count_syscalls[num-1]); //added
+    curproc->tf->eax = syscalls[num]();
+  } else {
+    cprintf("%d %s: unknown sys call %d\n",
+            curproc->pid, curproc->name, num);
+    curproc->tf->eax = -1;
+  }
+}
+\end{lstlisting}
+(Note that check\_systrace() is a part of Part 1(b) and will be defined later).
+\newline
+\newline
+This finishes Part 1(a).
+
+\subsection*{Part 1(b)}
+For this, we have to declare and define the sys\_toggle system call. toggle() will be the user function that will call the system call. This is done as follows.
+\begin{enumerate}
+	\item Add the following in \textit{syscall.c}.
+    \begin{lstlisting}
+    extern int sys_toggle(void);
+    extern int check_systrace(void);
+    \end{lstlisting}
+    To see how check\_systrace() is being used, refer to snippet in Part 1(a).
+    \item Add the following in \textit{syscall.h}.
+    \begin{lstlisting}
+    #define SYS_toggle 22
+    \end{lstlisting}
+    \item Add the following to the array of functions in \textit{syscall.c}.
+    \begin{lstlisting}
+    [SYS_toggle]  sys_toggle
+    \end{lstlisting}
+    \item Now let's define the sys\_toggle system call and check\_systrace() (it is a helper function). These definitions will be given in \textit{sysproc.c}. Add the following snippet to this file.
+    \newpage
+    \begin{lstlisting}
+    int systrace_mode;
+    int sys_toggle(void)
+    {
+      systrace_mode = 1-systrace_mode;
+      return 0;
+    }
+    int check_systrace(void) //Not a syscall
+    {
+      if(systrace_mode == 0)
+        return 1;
+      return 0;
+    }
+    \end{lstlisting}
+    \item Add the following in \textit{usys.S}.
+    \begin{lstlisting}
+    SYSCALL(toggle)
+    \end{lstlisting}
+    \item Finally add the following in \textit{user.h}
+    \begin{lstlisting}
+    int toggle(void);
+    \end{lstlisting}
+\end{enumerate}
+
+This completes Part 1(b).
+
+\subsection*{Part 2}
+For this, we have to declare and define the sys\_add system call. add() will be the user function that will call the system call. This is done as follows.
+\begin{enumerate}
+	\item Add the following in \textit{syscall.c}.
+    \begin{lstlisting}
+    extern int sys_add(void);
+    \end{lstlisting}
+    \item Add the following in \textit{syscall.h}.
+    \begin{lstlisting}
+    #define SYS_add 23
+    \end{lstlisting}
+    \item Add the following to the array of functions in \textit{syscall.c}.
+    \begin{lstlisting}
+    [SYS_add]  sys_add
+    \end{lstlisting}
+    \item Now let's define the sys\_add system call. The definition will be given in \textit{sysproc.c}. Add the following snippet to this file.
+    \newpage
+    \begin{lstlisting}
+    int sys_add(int a, int b)
+    {
+      argint(0, &a);
+      argint(1, &b);
+      return a+b;
+    }
+    \end{lstlisting}
+    \item Add the following in \textit{usys.S}.
+    \begin{lstlisting}
+    SYSCALL(add)
+    \end{lstlisting}
+    \item Finally add the following in \textit{user.h}
+    \begin{lstlisting}
+    int add(int, int);
+    \end{lstlisting}
+\end{enumerate}
+
+This completes Part 2.
+
+\subsection*{Part 3}
+For this, we have to declare and define the sys\_ps system call. ps() will be the user function that will call the system call. This is done as follows.
+\begin{enumerate}
+	\item Add the following in \textit{syscall.c}.
+    \begin{lstlisting}
+    extern int sys_ps(void);
+    \end{lstlisting}
+    \item Add the following in \textit{syscall.h}.
+    \begin{lstlisting}
+    #define SYS_ps 24
+    \end{lstlisting}
+    \item Add the following to the array of functions in \textit{syscall.c}.
+    \begin{lstlisting}
+    [SYS_ps]  sys_ps
+    \end{lstlisting}
+    \item Now let's define the sys\_ps system call. The definition will be given in \textit{sysproc.c}. Add the following snippet to this file.
+    \newpage
+    \begin{lstlisting}
+    extern void get_pid_name(void);
+    int sys_ps(void)
+    {
+      get_pid_name();
+      return 0;
+    }
+    \end{lstlisting}
+    \item Add the following in \textit{usys.S}.
+    \begin{lstlisting}
+    SYSCALL(ps)
+    \end{lstlisting}
+    \item Finally add the following in \textit{user.h}
+    \begin{lstlisting}
+    int ps(void);
+    \end{lstlisting}
+    \item The sys\_ps system call used a function get\_pid\_name() which does the main job of printing the process name and id. The definition will be given in \textit{proc.c}. Add the following snippet to this file.
+    \begin{lstlisting}
+    void get_pid_name(void)
+    {
+      struct proc *p;
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      {
+        int check = p->state;
+        if(check == UNUSED || check == EMBRYO || check == ZOMBIE)
+          continue;
+        cprintf("pid:%d name:%s\n", p->pid, p->name);
+      }
+    }
+    \end{lstlisting}
+\end{enumerate}
+
+This completes Part 3, and also concludes the Assignment.
+
+\end{document}
